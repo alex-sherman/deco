@@ -1,10 +1,12 @@
 import conc, time, math
-@conc.concurrent
+
+SLEEP_TIME = 0.1
+@conc.concurrent("SLEEP_TIME")
 def test(a,y):
-    time.sleep(0.1)
+    time.sleep(SLEEP_TIME)
     a[y] = y ** 2
 
-SIZE = 10
+SIZE = 100
 if __name__ == "__main__":
     a = dict([(i, 0) for i in range(1000)])
     b = {}
