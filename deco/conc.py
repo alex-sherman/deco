@@ -41,6 +41,11 @@ class argProxy(object):
         self.value = arg_value.value
         return self
 
+    def __getattr__(self, name):
+        if hasattr(self, 'value') and hasattr(self.value, name):
+            return getattr(self.value, name)
+        raise AttributeError
+
     def __setitem__(self, key, value):
         self.value.__setitem__(key, value)
         self.result_queue.put((self.arg_id, key, value))
@@ -49,17 +54,18 @@ class argProxy(object):
         return self.value.__getitem__(key)
 
 class concurrent(object):
-    def __init__(self, *args):
+    params = ['processes', 'globals']
+    def __init__(self, *args, **kwargs):
         self.globals = []
+        self.processes = 4
         if len(args) > 0 and type(args[0]) == types.FunctionType:
             self.f = args[0]
-        else:
-            self.globals = list(args)
-        self.num_workers = 4
+        self.__dict__.update({concurrent.params[i]: arg for i, arg in enumerate(args)})
+        self.__dict__.update({key: kwargs[key] for key in concurrent.params if key in kwargs})
         self.param_list = []
-        self.processes = None
+        self.workers = None
         self.manager = None
-        self.task_queues = [Pipe(False) for _ in range(self.num_workers)]
+        self.task_queues = [Pipe(False) for _ in range(self.processes)]
         self.qi = 0
         self.t3 = 0
         self.arg_proxies = {}
@@ -71,11 +77,11 @@ class concurrent(object):
             return self
         if self.manager == None:
             self.manager = multiprocessing.Manager()
-        if self.processes == None:
+        if self.workers == None:
             self.operation_queue = self.manager.Queue()
-            self.processes = [Process(target = concEntry, args=(i, marshal.dumps(self.f.func_code), q[0]))
+            self.workers = [Process(target = concEntry, args=(i, marshal.dumps(self.f.func_code), q[0]))
                 for i, q in enumerate(self.task_queues)]
-            for proc in self.processes: proc.start()
+            for proc in self.workers: proc.start()
         args = list(args)
         frm = inspect.stack()[1]
         mod = inspect.getmodule(frm[0])
@@ -91,21 +97,16 @@ class concurrent(object):
                 args[i] = self.arg_proxies[id(arg)].proxy
         self.task_queues[self.qi][1].send((args, global_args))
         self.qi += 1
-        self.qi %= self.num_workers
+        self.qi %= self.processes
     def process_operation_queue(self):
         arg_id, key, value = self.operation_queue.get()
         self.arg_proxies[arg_id].value.__setitem__(key, value)
     def wait(self):
         for task_queue in self.task_queues:
             task_queue[1].send(None)
-        t1 = time.time()
-        for proc in self.processes:
+        for proc in self.workers:
             proc.join()
-        t2 = time.time()
         while not self.operation_queue.empty():
             self.process_operation_queue()
-        t3 = time.time()
-        print "Join Time:", t2 - t1
-        print "Op Queue Time:", t3 - t2
-        self.processes = None
+        self.workers = None
         self.arg_proxies = {}
