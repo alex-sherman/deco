@@ -50,8 +50,8 @@ if __name__ == "__main__":
             pygame.draw.circle(screen, (128,128,128), (int(point.x), int(point.y)), int(math.pow(point.mass/200, .5)), 0)
 
         pygame.display.update()
+        Simulate(points, .1, 50)
         if i < frame_limit:
-            Simulate(points, .1, 50)
             i += 1
             if i == frame_limit:
                 print "Time:", time.time() - start

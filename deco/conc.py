@@ -57,11 +57,12 @@ class concurrent(object):
     params = ['processes', 'globals']
     def __init__(self, *args, **kwargs):
         self.globals = []
-        self.processes = 4
+        self.processes = 3
         if len(args) > 0 and type(args[0]) == types.FunctionType:
             self.f = args[0]
-        self.__dict__.update({concurrent.params[i]: arg for i, arg in enumerate(args)})
-        self.__dict__.update({key: kwargs[key] for key in concurrent.params if key in kwargs})
+        else:
+            self.__dict__.update({concurrent.params[i]: arg for i, arg in enumerate(args)})
+            self.__dict__.update({key: kwargs[key] for key in concurrent.params if key in kwargs})
         self.param_list = []
         self.workers = None
         self.manager = None

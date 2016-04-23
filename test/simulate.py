@@ -15,7 +15,14 @@ class Body(object):
     def distanceSquared(self, other):
         return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2)
 
-@concurrent(3)
+def Simulate(body_list, dt, iterations):
+    next_body_list = {}
+    for i in body_list.keys():
+        SimulateBody(body_list, next_body_list, i, iterations, dt)
+    SimulateBody.wait()
+    body_list.update(next_body_list)
+
+@concurrent
 def SimulateBody(body_list, next_body_list, index, iterations, dt):
     simulated_body = body_list[index]
     for _ in range(iterations):
@@ -31,10 +38,3 @@ def SimulateBody(body_list, next_body_list, index, iterations, dt):
             fy += (body.y - simulated_body.y) / d * f
         simulated_body.update(fx, fy, dt / iterations)
     next_body_list[index] = simulated_body
-
-def Simulate(body_list, dt, iterations):
-    next_body_list = {}
-    for i in body_list.keys():
-        SimulateBody(body_list, next_body_list, i, iterations, dt)
-    SimulateBody.wait()
-    body_list.update(next_body_list)
