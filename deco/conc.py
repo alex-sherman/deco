@@ -3,7 +3,7 @@ import multiprocessing.reduction
 from multiprocessing import Process, Pipe, Queue, Pool
 from threading import Thread
 from itertools import izip
-import time, inspect
+import time, inspect, ast
 import marshal, types
 
 def reduce(connection):
@@ -54,12 +54,11 @@ class argProxy(object):
         return self.value.__getitem__(key)
 
 class concurrent(object):
-    params = ['processes', 'globals']
+    params = ['processes']
     def __init__(self, *args, **kwargs):
-        self.globals = []
         self.processes = 3
         if len(args) > 0 and type(args[0]) == types.FunctionType:
-            self.f = args[0]
+            self.setFunction(args[0])
         else:
             self.__dict__.update({concurrent.params[i]: arg for i, arg in enumerate(args)})
             self.__dict__.update({key: kwargs[key] for key in concurrent.params if key in kwargs})
@@ -70,11 +69,26 @@ class concurrent(object):
         self.qi = 0
         self.t3 = 0
         self.arg_proxies = {}
-
+    def setFunction(self, f):
+        def findFreeNames(f):
+            source = inspect.getsourcelines(f)
+            source = "".join(source[0])
+            fast = ast.parse(source)
+            f_args_names = set([a.id for a in fast.body[0].args.args])
+            f_body = fast.body[0].body
+            f_vars_names = set()
+            f_free_names = set()
+            for line in f_body:
+                for n in ast.walk(line):
+                    if isinstance(n, ast.Name):
+                        f_vars_names.add(n.id)
+            f_free_names = f_vars_names.difference(f_args_names)
+            return f_free_names
+        self.f = f
+        self.free_names = findFreeNames(f)
     def __call__(self, *args):
         if len(args) > 0 and type(args[0]) == types.FunctionType:
-            self.f = args[0]
-            #exit()
+            self.setFunction(args[0])
             return self
         if self.manager == None:
             self.manager = multiprocessing.Manager()
@@ -87,7 +101,7 @@ class concurrent(object):
         frm = inspect.stack()[1]
         mod = inspect.getmodule(frm[0])
         args =  args
-        global_args = {g: getattr(mod, g) for g in self.globals}
+        global_args = {g: getattr(mod, g) for g in self.free_names if hasattr(mod, g)}
         for i, arg in enumerate(args):
             if type(arg) is dict or type(arg) is list:
                 if not id(arg) in self.arg_proxies:

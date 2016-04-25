@@ -1,5 +1,7 @@
 from deco import concurrent
 
+iterations = 50
+
 class Body(object):
     def __init__(self, x, y, vx, vy, mass):
         self.x = x
@@ -15,15 +17,15 @@ class Body(object):
     def distanceSquared(self, other):
         return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2)
 
-def Simulate(body_list, dt, iterations):
+def Simulate(body_list, dt):
     next_body_list = {}
     for i in body_list.keys():
-        SimulateBody(body_list, next_body_list, i, iterations, dt)
+        SimulateBody(body_list, next_body_list, i, dt)
     SimulateBody.wait()
     body_list.update(next_body_list)
 
 @concurrent
-def SimulateBody(body_list, next_body_list, index, iterations, dt):
+def SimulateBody(body_list, next_body_list, index, dt):
     simulated_body = body_list[index]
     for _ in range(iterations):
         fx = 0
