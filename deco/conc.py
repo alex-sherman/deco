@@ -21,6 +21,9 @@ def concEntry(index, target_function, arg_pipe):
             argValues[recv.arg_id] = recv
             continue
         args, global_args = recv
+        for arg in global_args.values():
+            if type(arg) is argProxy:
+                arg.with_backing(argValues[arg.arg_id])
         args = [arg.with_backing(argValues[arg.arg_id]) if type(arg) is argProxy else arg for arg in args]
         globals().update(global_args)
         f(*args)
@@ -69,6 +72,17 @@ class concurrent(object):
         self.qi = 0
         self.t3 = 0
         self.arg_proxies = {}
+
+    def replaceWithProxies(self, args):
+        for i, arg in enumerate(args):
+            if type(arg) is dict or type(arg) is list:
+                if not id(arg) in self.arg_proxies:
+                    value = argValue(id(arg), arg, self.operation_queue)
+                    self.arg_proxies[id(arg)] = value
+                    for queue in self.task_queues:
+                        queue[1].send(value)
+                args[i] = self.arg_proxies[id(arg)].proxy
+
     def setFunction(self, f):
         def findFreeNames(f):
             source = inspect.getsourcelines(f)
@@ -100,17 +114,11 @@ class concurrent(object):
         args = list(args)
         frm = inspect.stack()[1]
         mod = inspect.getmodule(frm[0])
-        args =  args
-        global_args = {g: getattr(mod, g) for g in self.free_names if hasattr(mod, g)}
-        for i, arg in enumerate(args):
-            if type(arg) is dict or type(arg) is list:
-                if not id(arg) in self.arg_proxies:
-                    value = argValue(id(arg), arg, self.operation_queue)
-                    self.arg_proxies[id(arg)] = value
-                    for queue in self.task_queues:
-                        queue[1].send(value)
-                args[i] = self.arg_proxies[id(arg)].proxy
-        self.task_queues[self.qi][1].send((args, global_args))
+        global_arg_keys = [g for g in self.free_names if hasattr(mod, g)]
+        global_args = [getattr(mod, g) for g in global_arg_keys]
+        self.replaceWithProxies(args)
+        self.replaceWithProxies(global_args)
+        self.task_queues[self.qi][1].send((args, dict(zip(global_arg_keys, global_args))))
         self.qi += 1
         self.qi %= self.processes
     def process_operation_queue(self):
