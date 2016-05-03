@@ -1,7 +1,7 @@
-import conc, time, math
+import deco, time, math
 
 SLEEP_TIME = 0.1
-@conc.concurrent("SLEEP_TIME")
+@deco.concurrent(3)
 def test(a,y):
     time.sleep(SLEEP_TIME)
     a[y] = y ** 2

@@ -6,43 +6,17 @@ from itertools import izip
 import time, inspect, ast
 import marshal, types
 
-def reduce(connection):
-    return multiprocessing.reduction.reduce_connection(connection)
-
-def concEntry(index, target_function, arg_pipe):
-    code = marshal.loads(target_function)
-    f = types.FunctionType(code, globals(), "f")
-    globals()['f'] = f
-    argValues = {}
-    while True:
-        recv = arg_pipe.recv()
-        if recv == None: return
-        if type(recv) is argValue:
-            argValues[recv.arg_id] = recv
-            continue
-        args, global_args = recv
-        for arg in global_args.values():
-            if type(arg) is argProxy:
-                arg.with_backing(argValues[arg.arg_id])
-        args = [arg.with_backing(argValues[arg.arg_id]) if type(arg) is argProxy else arg for arg in args]
+def concWrapper(args, global_args):
         globals().update(global_args)
-        f(*args)
-
-class argValue(object):
-    def __init__(self, arg_id, value, result_queue):
-        self.arg_id = arg_id
-        self.value = value
-        self.result_queue = result_queue
-        self.proxy = argProxy(arg_id)
+        result = f(*args)
+        operations = [inner for outer in args if type(outer) is argProxy for inner in outer.operations]
+        return result, operations
 
 class argProxy(object):
-    def __init__(self, arg_id):
+    def __init__(self, arg_id, value):
         self.arg_id = arg_id
-
-    def with_backing(self, arg_value):
-        self.result_queue = arg_value.result_queue
-        self.value = arg_value.value
-        return self
+        self.operations = []
+        self.value = value
 
     def __getattr__(self, name):
         if hasattr(self, 'value') and hasattr(self.value, name):
@@ -51,7 +25,7 @@ class argProxy(object):
 
     def __setitem__(self, key, value):
         self.value.__setitem__(key, value)
-        self.result_queue.put((self.arg_id, key, value))
+        self.operations.append((self.arg_id, key, value))
 
     def __getitem__(self, key):
         return self.value.__getitem__(key)
@@ -65,23 +39,16 @@ class concurrent(object):
         else:
             self.__dict__.update({concurrent.params[i]: arg for i, arg in enumerate(args)})
             self.__dict__.update({key: kwargs[key] for key in concurrent.params if key in kwargs})
-        self.param_list = []
-        self.workers = None
-        self.manager = None
-        self.task_queues = [Pipe(False) for _ in range(self.processes)]
-        self.qi = 0
-        self.t3 = 0
+        self.results = []
         self.arg_proxies = {}
+        self.p = None
 
     def replaceWithProxies(self, args):
         for i, arg in enumerate(args):
             if type(arg) is dict or type(arg) is list:
                 if not id(arg) in self.arg_proxies:
-                    value = argValue(id(arg), arg, self.operation_queue)
-                    self.arg_proxies[id(arg)] = value
-                    for queue in self.task_queues:
-                        queue[1].send(value)
-                args[i] = self.arg_proxies[id(arg)].proxy
+                    self.arg_proxies[id(arg)] = argProxy(id(arg), arg)
+                args[i] = self.arg_proxies[id(arg)]
 
     def setFunction(self, f):
         def findFreeNames(f):
@@ -99,37 +66,30 @@ class concurrent(object):
             f_free_names = f_vars_names.difference(f_args_names)
             return f_free_names
         self.f = f
+        globals()['f'] = f
         self.free_names = findFreeNames(f)
     def __call__(self, *args):
         if len(args) > 0 and type(args[0]) == types.FunctionType:
             self.setFunction(args[0])
             return self
-        if self.manager == None:
-            self.manager = multiprocessing.Manager()
-        if self.workers == None:
-            self.operation_queue = self.manager.Queue()
-            self.workers = [Process(target = concEntry, args=(i, marshal.dumps(self.f.func_code), q[0]))
-                for i, q in enumerate(self.task_queues)]
-            for proc in self.workers: proc.start()
+        if self.p == None:
+            self.p = Pool(self.processes)
         args = list(args)
         frm = inspect.stack()[1]
         mod = inspect.getmodule(frm[0])
-        global_arg_keys = [g for g in self.free_names if hasattr(mod, g)]
+        global_arg_keys = [g for g in self.free_names if hasattr(mod, g) and type(getattr(mod, g)) != types.ModuleType]
         global_args = [getattr(mod, g) for g in global_arg_keys]
         self.replaceWithProxies(args)
         self.replaceWithProxies(global_args)
-        self.task_queues[self.qi][1].send((args, dict(zip(global_arg_keys, global_args))))
-        self.qi += 1
-        self.qi %= self.processes
-    def process_operation_queue(self):
-        arg_id, key, value = self.operation_queue.get()
-        self.arg_proxies[arg_id].value.__setitem__(key, value)
+        self.results.append(self.p.apply_async(concWrapper, [args, dict(zip(global_arg_keys, global_args))]))
+    def process_operation_queue(self, ops):
+        for arg_id, key, value in ops:
+            self.arg_proxies[arg_id].value.__setitem__(key, value)
     def wait(self):
-        for task_queue in self.task_queues:
-            task_queue[1].send(None)
-        for proc in self.workers:
-            proc.join()
-        while not self.operation_queue.empty():
-            self.process_operation_queue()
-        self.workers = None
+        results = []
+        while len(self.results) > 0:
+            result, operations = self.results.pop().get()
+            self.process_operation_queue(operations)
+            results.append(result)
         self.arg_proxies = {}
+        return results
