@@ -1,25 +1,19 @@
 import deco, time, math
 
-SLEEP_TIME = 0.1
-@deco.concurrent(3)
-def test(a,y):
-    time.sleep(SLEEP_TIME)
-    a[y] = y ** 2
+@deco.concurrent
+def test(sleep_time):
+    time.sleep(sleep_time)
 
 SIZE = 100
 if __name__ == "__main__":
-    a = dict([(i, 0) for i in range(1000)])
-    b = {}
-    start = time.time()
-    for x in range(SIZE):
-        test(a, x)
-    test.wait()
-    ctime = time.time() - start
-    #print "Result of a:", a
-    start = time.time()
-    for x in range(SIZE):
-        test.f(b, x)
-    stime = time.time() - start
-    #print "Result of b:", b
-    print "Concurrent style:", ctime
-    print "Serial style:", stime
+    processes = [1,2,3,4]
+    times = [0, 0.1, 0.25, 0.5, 1]
+    for process_count in processes:
+        for time_duration in times:
+            test.processes = process_count
+            test.p = None
+            start = time.time()
+            for _ in range(SIZE):
+                test(time_duration)
+            test.wait()
+            print process_count, time_duration, time.time() - start
