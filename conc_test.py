@@ -11,7 +11,6 @@ def test_size(size):
     for i in range(size):
         results[i] = test(time_duration, i)
     print results
-    return results
 
 SIZE = 100
 if __name__ == "__main__":
@@ -21,6 +20,6 @@ if __name__ == "__main__":
         for time_duration in times:
             test.processes = process_count
             test.p = None
-            print test_size(SIZE)
+            test_size(SIZE)
             exit()
             print process_count, time_duration

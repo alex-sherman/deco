@@ -35,6 +35,14 @@ class SchedulerRewriter(NodeTransformer):
     def __init__(self):
         self.arguments = []
         self.encountered_funcs = set()
+    def references_arg(self, node):
+        for field in node._fields:
+            value = getattr(node, field)
+            if not hasattr(value, "__iter__"):
+                value = [value]
+            if any([True for child in value if (type(child) is ast.Name and child.id in self.arguments)]):
+                return True
+        return False
     def generic_visit(self, node):
         super(NodeTransformer, self).generic_visit(node)
         if hasattr(node, 'body'):
@@ -42,15 +50,22 @@ class SchedulerRewriter(NodeTransformer):
             if len(returns) > 0:
                 for wait in self.get_waits():
                     node.body.insert(returns[0], wait)
+            inserts = []
             for i, child in enumerate(node.body):
                 if type(child) is ast.Assign and type(child.value) is ast.Call:
                     call = child.value
                     self.encountered_funcs.add(call.func.id)
                     name = child.targets[0].value
+                    self.arguments.append(name.id)
                     index = child.targets[0].slice.value
                     call.func = ast.Attribute(call.func, 'assign', ast.Load())
                     call.args = [ast.Tuple([name, index], ast.Load())] + call.args
                     node.body[i] = ast.Expr(call)
+                elif self.references_arg(child):
+                    inserts.insert(0, i)
+            for index in inserts:
+                for wait in self.get_waits():
+                    node.body.insert(index, wait)
     def get_waits(self):
         return [ast.Expr(ast.Call(ast.Attribute(ast.Name(fname, ast.Load()), 'wait', ast.Load()), [], [], None, None)) for fname in self.encountered_funcs]
     def visit_FunctionDef(self, node):
@@ -67,6 +82,7 @@ class synchronized(object):
         node = fast
         rewriter = SchedulerRewriter()
         rewriter.visit(node.body[0])
+        #print ast.dump(node.body[0])
         ast.fix_missing_locations(node)
         out = compile(node, "<string>", "exec")
         exec out in f.func_globals
