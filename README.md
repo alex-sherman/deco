@@ -44,7 +44,7 @@ What it does
  - The `@concurrent` decorator use multiprocessing.pool to parallelize calls to the target function
  - Indexed based mutation of function arguments is handled automatically, which pool cannot do
  - The `@synchronized` decorator automatically inserts synchronization events 
- - It also automatically refactors assignments of the results of @concurrent function calls to happen during synchronization events
+ - It also automatically refactors assignments of the results of `@concurrent` function calls to happen during synchronization events
  
 How it works
 -------------
