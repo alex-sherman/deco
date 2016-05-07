@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="UTF-8">
+    <title>DECO by alex-sherman</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
+  </head>
+  <body>
+    <section class="page-header">
+      <h1 class="project-name">DECO</h1>
+      <h2 class="project-tagline">Decorated Concurrency</h2>
+      <a href="https://github.com/alex-sherman/deco" class="btn">View on GitHub</a>
+      <a href="https://github.com/alex-sherman/deco/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/alex-sherman/deco/tarball/master" class="btn">Download .tar.gz</a>
+    </section>
+
+    <section class="main-content">
+      <h1>
+<a id="decorated-concurrency" class="anchor" href="#decorated-concurrency" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Decorated Concurrency</h1>
+
+<p>A simplified parallel computing model for Python.
+DECO automatically parallelizes Python programs, and requires minimal modifcations to existing serial programs.</p>
+
+<p>Install using pip:</p>
+
+<pre><code>pip install deco
+</code></pre>
+
+<h2>
+<a id="general-usage" class="anchor" href="#general-usage" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>General Usage</h2>
+
+<p>Using DECO is as simple as finding, or creating, two functions in your Python program.
+The first function is the one we want to run in parallel, and is decorated with <code>@concurrent</code>.
+The second function is the function which calls the <code>@concurrent</code> function and is decorated with <code>@synchronized</code>.
+Decorating the second function is optional, but provides some very cool benefits.
+Let's take a look at an example.</p>
+
+<div class="highlight highlight-source-python"><pre><span class="pl-en">@concurrent</span> <span class="pl-c"># We add this for the concurrent function</span>
+<span class="pl-k">def</span> <span class="pl-en">process_lat_lon</span>(<span class="pl-smi">lat</span>, <span class="pl-smi">lon</span>, <span class="pl-smi">data</span>):
+  <span class="pl-c">#Does some work</span>
+  <span class="pl-k">return</span> result
+
+<span class="pl-en">@synchronized</span> <span class="pl-c"># And we add this for the function which calls the concurrent function</span>
+<span class="pl-k">def</span> <span class="pl-en">process_data_set</span>(<span class="pl-smi">data</span>):
+  results <span class="pl-k">=</span> defaultdict(<span class="pl-c1">dict</span>)
+  <span class="pl-k">for</span> lat <span class="pl-k">in</span> <span class="pl-c1">range</span>(<span class="pl-c1">...</span>):
+    <span class="pl-k">for</span> lon <span class="pl-k">in</span> <span class="pl-c1">range</span>(<span class="pl-c1">...</span>):
+      results[lat][lon] <span class="pl-k">=</span> process_lat_lon(lat, lon, data)
+  <span class="pl-k">return</span> results</pre></div>
+
+<p>That's it, two lines of changes is all we need in order to parallelize this program.
+Now this program will make use of all the cores on the machine it's running on, allowing it to run significantly faster.</p>
+
+<h2>
+<a id="what-it-does" class="anchor" href="#what-it-does" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What it does</h2>
+
+<ul>
+<li>The <code>@concurrent</code> decorator use multiprocessing.pool to parallelize calls to the target function</li>
+<li>Indexed based mutation of function arguments is handled automatically, which pool cannot do</li>
+<li>The <code>@synchronized</code> decorator automatically inserts synchronization events </li>
+<li>It also automatically refactors assignments of the results of <code>@concurrent</code> function calls to happen during synchronization events</li>
+</ul>
+
+<h2>
+<a id="how-it-works" class="anchor" href="#how-it-works" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How it works</h2>
+
+<p>For an in depth discussion of the mechanisms at work, we wrote a paper for a class
+which <a href="https://drive.google.com/file/d/0B_olmC0u8E3gWTBmN3pydGxHdEE/view">can be found here</a>.</p>
+
+<p>As an overview, DECO is mainly just a smart wrapper for Python's multiprocessing.pool.
+When <code>@concurrent</code> is applied to a function it replaces it with calls to pool.apply_async.
+Additionally when arguments are passed to pool.apply_async, DECO replaces any index mutable objects with proxies, allowing it to detect and synchronize mutations of these objects.
+The results of these calls can then be obtained by calling wait() on the concurrent function, invoking a synchronization event.
+These events can be placed automatically in your code by using the <code>@synchronized</code> decorator on functions that call <code>@concurrent</code> functions.
+Additionally while using <code>@synchronized</code>, you can directly assign the result of concurrent function calls to index mutable objects.
+These assignments get refactored by DECO to automatically occur during the next synchronization event.
+All of these means that in many cases, parallel programming using DECO appears exactly the same as simpler serial programming.</p>
+
+      <footer class="site-footer">
+        <span class="site-footer-owner"><a href="https://github.com/alex-sherman/deco">DECO</a> is maintained by <a href="https://github.com/alex-sherman">alex-sherman</a>.</span>
+
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
+      </footer>
+
+    </section>
+
+  
+  </body>
+</html>
