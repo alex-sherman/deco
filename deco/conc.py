@@ -32,8 +32,9 @@ class argProxy(object):
         return self.value.__getitem__(key)
 
 class SchedulerRewriter(NodeTransformer):
-    def __init__(self):
+    def __init__(self, concurrent_funcs):
         self.arguments = []
+        self.concurrent_funcs = concurrent_funcs
         self.encountered_funcs = set()
     def references_arg(self, node):
         for field in node._fields:
@@ -43,6 +44,16 @@ class SchedulerRewriter(NodeTransformer):
             if any([True for child in value if (type(child) is ast.Name and child.id in self.arguments)]):
                 return True
         return False
+    @staticmethod
+    def subscript_name(node):
+        if type(node) is ast.Name:
+            return node.id
+        elif type(node) is ast.Subscript:
+            return SchedulerRewriter.subscript_name(node.value)
+        raise ValueError("Assignment attempted on something that is not index based")
+    def is_valid_assignment(self, node):
+        return type(node) is ast.Assign and type(node.value) is ast.Call \
+            and type(node.value.func) is ast.Name and node.value.func.id in self.concurrent_funcs
     def generic_visit(self, node):
         super(NodeTransformer, self).generic_visit(node)
         if hasattr(node, 'body'):
@@ -52,11 +63,11 @@ class SchedulerRewriter(NodeTransformer):
                     node.body.insert(returns[0], wait)
             inserts = []
             for i, child in enumerate(node.body):
-                if type(child) is ast.Assign and type(child.value) is ast.Call:
+                if self.is_valid_assignment(child):
                     call = child.value
                     self.encountered_funcs.add(call.func.id)
                     name = child.targets[0].value
-                    self.arguments.append(name.id)
+                    self.arguments.append(SchedulerRewriter.subscript_name(name))
                     index = child.targets[0].slice.value
                     call.func = ast.Attribute(call.func, 'assign', ast.Load())
                     call.args = [ast.Tuple([name, index], ast.Load())] + call.args
@@ -76,19 +87,22 @@ class SchedulerRewriter(NodeTransformer):
 
 class synchronized(object):
     def __init__(self, f):
-        source = inspect.getsourcelines(f)
-        source = "".join(source[0])
-        fast = ast.parse(source)
-        node = fast
-        rewriter = SchedulerRewriter()
-        rewriter.visit(node.body[0])
-        #print ast.dump(node.body[0])
-        ast.fix_missing_locations(node)
-        out = compile(node, "<string>", "exec")
-        exec out in f.func_globals
-        self.f = f.func_globals['test_size']
+        self.orig_f = f
+        self.f = None
 
     def __call__(self, *args, **kwargs):
+        if self.f == None:
+            source = inspect.getsourcelines(self.orig_f)
+            source = "".join(source[0])
+            fast = ast.parse(source)
+            node = fast
+            rewriter = SchedulerRewriter(concurrent.functions)
+            rewriter.visit(node.body[0])
+            #print ast.dump(node.body[0])
+            ast.fix_missing_locations(node)
+            out = compile(node, "<string>", "exec")
+            exec out in self.orig_f.func_globals
+            self.f = self.orig_f.func_globals[self.orig_f.__name__]
         return self.f(*args, **kwargs)
 
 class concurrent(object):
