@@ -1,17 +1,16 @@
-import multiprocessing
-import multiprocessing.reduction
-from multiprocessing import Process, Pipe, Queue, Pool
-from threading import Thread
-from itertools import izip
-import time, inspect, ast
-import marshal, types
+from multiprocessing import Pool
+import inspect
+import ast
+import types
 from ast import NodeTransformer
+
 
 def concWrapper(args, global_args):
         globals().update(global_args)
         result = f(*args)
         operations = [inner for outer in args if type(outer) is argProxy for inner in outer.operations]
         return result, operations
+
 
 class argProxy(object):
     def __init__(self, arg_id, value):
@@ -31,11 +30,13 @@ class argProxy(object):
     def __getitem__(self, key):
         return self.value.__getitem__(key)
 
+
 class SchedulerRewriter(NodeTransformer):
     def __init__(self, concurrent_funcs):
         self.arguments = []
         self.concurrent_funcs = concurrent_funcs
         self.encountered_funcs = set()
+
     def references_arg(self, node):
         for field in node._fields:
             value = getattr(node, field)
@@ -44,6 +45,7 @@ class SchedulerRewriter(NodeTransformer):
             if any([True for child in value if (type(child) is ast.Name and child.id in self.arguments)]):
                 return True
         return False
+
     @staticmethod
     def subscript_name(node):
         if type(node) is ast.Name:
@@ -51,9 +53,11 @@ class SchedulerRewriter(NodeTransformer):
         elif type(node) is ast.Subscript:
             return SchedulerRewriter.subscript_name(node.value)
         raise ValueError("Assignment attempted on something that is not index based")
+
     def is_valid_assignment(self, node):
         return type(node) is ast.Assign and type(node.value) is ast.Call \
             and type(node.value.func) is ast.Name and node.value.func.id in self.concurrent_funcs
+
     def generic_visit(self, node):
         super(NodeTransformer, self).generic_visit(node)
         if hasattr(node, 'body'):
@@ -77,13 +81,16 @@ class SchedulerRewriter(NodeTransformer):
             for index in inserts:
                 for wait in self.get_waits():
                     node.body.insert(index, wait)
+
     def get_waits(self):
         return [ast.Expr(ast.Call(ast.Attribute(ast.Name(fname, ast.Load()), 'wait', ast.Load()), [], [], None, None)) for fname in self.encountered_funcs]
+
     def visit_FunctionDef(self, node):
         node.decorator_list = []
         self.generic_visit(node)
         node.body += self.get_waits()
         return node
+
 
 class synchronized(object):
     def __init__(self, f):
@@ -91,26 +98,27 @@ class synchronized(object):
         self.f = None
 
     def __call__(self, *args, **kwargs):
-        if self.f == None:
+        if self.f is None:
             source = inspect.getsourcelines(self.orig_f)
             source = "".join(source[0])
             fast = ast.parse(source)
             node = fast
             rewriter = SchedulerRewriter(concurrent.functions)
             rewriter.visit(node.body[0])
-            #print ast.dump(node.body[0])
             ast.fix_missing_locations(node)
             out = compile(node, "<string>", "exec")
             exec out in self.orig_f.func_globals
             self.f = self.orig_f.func_globals[self.orig_f.__name__]
         return self.f(*args, **kwargs)
 
+
 class concurrent(object):
     params = ['processes']
     functions = []
+
     def __init__(self, *args, **kwargs):
         self.processes = 3
-        if len(args) > 0 and type(args[0]) == types.FunctionType:
+        if len(args) > 0 and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
         else:
             self.__dict__.update({concurrent.params[i]: arg for i, arg in enumerate(args)})
@@ -129,6 +137,7 @@ class concurrent(object):
 
     def setFunction(self, f):
         concurrent.functions.append(f.__name__)
+
         def findFreeNames(f):
             source = inspect.getsourcelines(f)
             source = "".join(source[0])
@@ -146,27 +155,31 @@ class concurrent(object):
         self.f = f
         globals()['f'] = f
         self.free_names = findFreeNames(f)
+
     def assign(self, target, *args):
         self.assigns.append((target, self(*args)))
+
     def __call__(self, *args):
-        if len(args) > 0 and type(args[0]) == types.FunctionType:
+        if len(args) > 0 and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
             return self
-        if self.p == None:
+        if self.p is None:
             self.p = Pool(self.processes)
         args = list(args)
         frm = inspect.stack()[1]
         mod = inspect.getmodule(frm[0])
-        global_arg_keys = [g for g in self.free_names if hasattr(mod, g) and type(getattr(mod, g)) != types.ModuleType]
+        global_arg_keys = [g for g in self.free_names if hasattr(mod, g) and not isinstance(getattr(mod, g), types.ModuleType)]
         global_args = [getattr(mod, g) for g in global_arg_keys]
         self.replaceWithProxies(args)
         self.replaceWithProxies(global_args)
         result = self.p.apply_async(concWrapper, [args, dict(zip(global_arg_keys, global_args))])
         self.results.append(result)
         return result
+
     def process_operation_queue(self, ops):
         for arg_id, key, value in ops:
             self.arg_proxies[arg_id].value.__setitem__(key, value)
+
     def wait(self):
         results = []
         while len(self.results) > 0:
