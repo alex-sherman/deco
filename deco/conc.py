@@ -113,8 +113,12 @@ class concurrent(object):
         if len(args) > 0 and type(args[0]) == types.FunctionType:
             self.setFunction(args[0])
         else:
-            self.__dict__.update({concurrent.params[i]: arg for i, arg in enumerate(args)})
-            self.__dict__.update({key: kwargs[key] for key in concurrent.params if key in kwargs})
+            self.__dict__.update(
+                dict([(concurrent.params[i], arg) for i, arg in enumerate(args)])
+            )
+            self.__dict__.update(
+                dict([(key, kwargs[key]) for key in concurrent.params if key in kwargs])
+            )
         self.results = []
         self.assigns = []
         self.arg_proxies = {}
