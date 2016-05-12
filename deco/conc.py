@@ -5,11 +5,10 @@ import types
 from ast import NodeTransformer
 
 
-def concWrapper(args, global_args):
-        globals().update(global_args)
-        result = f(*args)
-        operations = [inner for outer in args if type(outer) is argProxy for inner in outer.operations]
-        return result, operations
+def concWrapper(f, args):
+    result = concurrent.functions[f](*args)
+    operations = [inner for outer in args if type(outer) is argProxy for inner in outer.operations]
+    return result, operations
 
 
 class argProxy(object):
@@ -33,16 +32,21 @@ class argProxy(object):
 
 class SchedulerRewriter(NodeTransformer):
     def __init__(self, concurrent_funcs):
-        self.arguments = []
+        self.arguments = set()
         self.concurrent_funcs = concurrent_funcs
         self.encountered_funcs = set()
 
     def references_arg(self, node):
+        if not isinstance(node, ast.AST):
+            return False
+        if type(node) is ast.Name:
+            return type(node.ctx) is ast.Load and node.id in self.arguments
         for field in node._fields:
+            if field == "body": continue
             value = getattr(node, field)
             if not hasattr(value, "__iter__"):
                 value = [value]
-            if any([True for child in value if (type(child) is ast.Name and child.id in self.arguments)]):
+            if any([self.references_arg(child) for child in value]):
                 return True
         return False
 
@@ -54,9 +58,16 @@ class SchedulerRewriter(NodeTransformer):
             return SchedulerRewriter.subscript_name(node.value)
         raise ValueError("Assignment attempted on something that is not index based")
 
+    def is_concurrent_call(self, node):
+        return type(node) is ast.Call and type(node.func) is ast.Name and node.func.id in self.concurrent_funcs
+
     def is_valid_assignment(self, node):
-        return type(node) is ast.Assign and type(node.value) is ast.Call \
-            and type(node.value.func) is ast.Name and node.value.func.id in self.concurrent_funcs
+        return type(node) is ast.Assign and self.is_concurrent_call(node.value)
+
+    def encounter_call(self, call):
+        self.encountered_funcs.add(call.func.id)
+        for arg in call.args:
+            self.arguments.add(SchedulerRewriter.subscript_name(arg))
 
     def generic_visit(self, node):
         super(NodeTransformer, self).generic_visit(node)
@@ -67,11 +78,13 @@ class SchedulerRewriter(NodeTransformer):
                     node.body.insert(returns[0], wait)
             inserts = []
             for i, child in enumerate(node.body):
-                if self.is_valid_assignment(child):
+                if type(child) is ast.Expr and self.is_concurrent_call(child.value):
+                    self.encounter_call(child.value)
+                elif self.is_valid_assignment(child):
                     call = child.value
-                    self.encountered_funcs.add(call.func.id)
+                    self.encounter_call(call)
                     name = child.targets[0].value
-                    self.arguments.append(SchedulerRewriter.subscript_name(name))
+                    self.arguments.add(SchedulerRewriter.subscript_name(name))
                     index = child.targets[0].slice.value
                     call.func = ast.Attribute(call.func, 'assign', ast.Load())
                     call.args = [ast.Tuple([name, index], ast.Load())] + call.args
@@ -103,7 +116,7 @@ class synchronized(object):
             source = "".join(source[0])
             fast = ast.parse(source)
             node = fast
-            rewriter = SchedulerRewriter(concurrent.functions)
+            rewriter = SchedulerRewriter(concurrent.functions.keys())
             rewriter.visit(node.body[0])
             ast.fix_missing_locations(node)
             out = compile(node, "<string>", "exec")
@@ -113,20 +126,20 @@ class synchronized(object):
 
 
 class concurrent(object):
-    params = ['processes']
-    functions = []
+    functions = {}
 
     def __init__(self, *args, **kwargs):
-        self.processes = 3
+        self.pool_args = []
+        self.pool_kwargs = {}
         if len(args) > 0 and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
         else:
-            self.__dict__.update({concurrent.params[i]: arg for i, arg in enumerate(args)})
-            self.__dict__.update({key: kwargs[key] for key in concurrent.params if key in kwargs})
+            self.pool_args = args
+            self.pool_kwargs = kwargs
         self.results = []
         self.assigns = []
         self.arg_proxies = {}
-        self.p = None
+        self.pool = None
 
     def replaceWithProxies(self, args):
         for i, arg in enumerate(args):
@@ -136,25 +149,8 @@ class concurrent(object):
                 args[i] = self.arg_proxies[id(arg)]
 
     def setFunction(self, f):
-        concurrent.functions.append(f.__name__)
-
-        def findFreeNames(f):
-            source = inspect.getsourcelines(f)
-            source = "".join(source[0])
-            fast = ast.parse(source)
-            f_args_names = set([a.id for a in fast.body[0].args.args])
-            f_body = fast.body[0].body
-            f_vars_names = set()
-            f_free_names = set()
-            for line in f_body:
-                for n in ast.walk(line):
-                    if isinstance(n, ast.Name):
-                        f_vars_names.add(n.id)
-            f_free_names = f_vars_names.difference(f_args_names)
-            return f_free_names
-        self.f = f
-        globals()['f'] = f
-        self.free_names = findFreeNames(f)
+        concurrent.functions[f.__name__] = f
+        self.f_name = f.__name__
 
     def assign(self, target, *args):
         self.assigns.append((target, self(*args)))
@@ -163,16 +159,11 @@ class concurrent(object):
         if len(args) > 0 and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
             return self
-        if self.p is None:
-            self.p = Pool(self.processes)
+        if self.pool is None:
+            self.pool = Pool(*self.pool_args, **self.pool_kwargs)
         args = list(args)
-        frm = inspect.stack()[1]
-        mod = inspect.getmodule(frm[0])
-        global_arg_keys = [g for g in self.free_names if hasattr(mod, g) and not isinstance(getattr(mod, g), types.ModuleType)]
-        global_args = [getattr(mod, g) for g in global_arg_keys]
         self.replaceWithProxies(args)
-        self.replaceWithProxies(global_args)
-        result = self.p.apply_async(concWrapper, [args, dict(zip(global_arg_keys, global_args))])
+        result = self.pool.apply_async(concWrapper, [self.f_name, args])
         self.results.append(result)
         return result
 
