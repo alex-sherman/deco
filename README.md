@@ -41,7 +41,7 @@ Now this program will make use of all the cores on the machine it's running on, 
 What it does
 -------------
 
- - The `@concurrent` decorator use multiprocessing.pool to parallelize calls to the target function
+ - The `@concurrent` decorator uses multiprocessing.pool to parallelize calls to the target function
  - Indexed based mutation of function arguments is handled automatically, which pool cannot do
  - The `@synchronized` decorator automatically inserts synchronization events 
  - It also automatically refactors assignments of the results of `@concurrent` function calls to happen during synchronization events
@@ -59,6 +59,6 @@ The results of these calls can then be obtained by calling wait() on the concurr
 These events can be placed automatically in your code by using the `@synchronized` decorator on functions that call `@concurrent` functions.
 Additionally while using `@synchronized`, you can directly assign the result of concurrent function calls to index mutable objects.
 These assignments get refactored by DECO to automatically occur during the next synchronization event.
-All of these means that in many cases, parallel programming using DECO appears exactly the same as simpler serial programming.
+All of this means that in many cases, parallel programming using DECO appears exactly the same as simpler serial programming.
 
 
