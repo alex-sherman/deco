@@ -2,7 +2,6 @@ import multiprocessing
 import multiprocessing.reduction
 from multiprocessing import Process, Pipe, Queue, Pool
 from threading import Thread
-from itertools import izip
 import time, inspect, ast
 import marshal, types
 from ast import NodeTransformer
@@ -101,7 +100,7 @@ class synchronized(object):
             #print ast.dump(node.body[0])
             ast.fix_missing_locations(node)
             out = compile(node, "<string>", "exec")
-            exec out in self.orig_f.func_globals
+            exec(out in self.orig_f.func_globals)
             self.f = self.orig_f.func_globals[self.orig_f.__name__]
         return self.f(*args, **kwargs)
 
