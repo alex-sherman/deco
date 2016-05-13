@@ -11,7 +11,7 @@ def run():
 
 @concurrent
 def simulate():
-    print BODIES
+    print(BODIES)
 
 if __name__ == "__main__":
     run()

@@ -28,7 +28,7 @@ def test(sleep_time):
 test_time = 2
 if __name__ == "__main__":
     times = [0.001, 0.005, 0.01, 0.1, 0.5, 1, 2, 5, 10, 20, 30]
-    print "Measuring hashes/sec with single threaded synchronous calls"
+    print("Measuring hashes/sec with single threaded synchronous calls")
     for time_duration in times:
         hashes = 0
         start = time.time()
@@ -37,8 +37,8 @@ if __name__ == "__main__":
             iterations = 20000
         for _ in range(iterations):
             hashes += test_synchronous(time_duration)
-        print time_duration, hashes / (time.time() - start)
-    print "Measuring hashes/sec with deco multiprocess calls (3 workers)"
+        print(time_duration, hashes / (time.time() - start))
+    print("Measuring hashes/sec with deco multiprocess calls (3 workers)")
     for time_duration in times:
         hashes = 0
         start = time.time()
@@ -49,4 +49,4 @@ if __name__ == "__main__":
             test(time_duration)
         result = test.wait()
         hashes = sum(result)
-        print hashes / (time.time() - start)
+        print(hashes / (time.time() - start))

@@ -22,5 +22,5 @@ if __name__ == "__main__":
     random.seed(0)
     data = [random.random() for _ in range(200)]
     start = time.time()
-    print process_data_set(data)
-    print time.time() - start
+    print(process_data_set(data))
+    print(time.time() - start)

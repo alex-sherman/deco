@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+from __future__ import print_function
 import pygame
 import random
 import math
@@ -56,7 +57,7 @@ if __name__ == "__main__":
         if i < frame_limit:
             i += 1
             if i == frame_limit:
-                print "Time:", time.time() - start
+                print("Time:", time.time() - start)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:

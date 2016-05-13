@@ -1,8 +1,8 @@
 from multiprocessing import Pool
 import inspect
 import ast
+from . import astutil
 import types
-from ast import NodeTransformer
 
 
 def concWrapper(f, args):
@@ -18,6 +18,8 @@ class argProxy(object):
         self.value = value
 
     def __getattr__(self, name):
+        if name in ["__getstate__", "__setstate__"]:
+            raise AttributeError
         if hasattr(self, 'value') and hasattr(self.value, name):
             return getattr(self.value, name)
         raise AttributeError
@@ -28,81 +30,6 @@ class argProxy(object):
 
     def __getitem__(self, key):
         return self.value.__getitem__(key)
-
-
-class SchedulerRewriter(NodeTransformer):
-    def __init__(self, concurrent_funcs):
-        self.arguments = set()
-        self.concurrent_funcs = concurrent_funcs
-        self.encountered_funcs = set()
-
-    def references_arg(self, node):
-        if not isinstance(node, ast.AST):
-            return False
-        if type(node) is ast.Name:
-            return type(node.ctx) is ast.Load and node.id in self.arguments
-        for field in node._fields:
-            if field == "body": continue
-            value = getattr(node, field)
-            if not hasattr(value, "__iter__"):
-                value = [value]
-            if any([self.references_arg(child) for child in value]):
-                return True
-        return False
-
-    @staticmethod
-    def subscript_name(node):
-        if type(node) is ast.Name:
-            return node.id
-        elif type(node) is ast.Subscript:
-            return SchedulerRewriter.subscript_name(node.value)
-        raise ValueError("Assignment attempted on something that is not index based")
-
-    def is_concurrent_call(self, node):
-        return type(node) is ast.Call and type(node.func) is ast.Name and node.func.id in self.concurrent_funcs
-
-    def is_valid_assignment(self, node):
-        return type(node) is ast.Assign and self.is_concurrent_call(node.value)
-
-    def encounter_call(self, call):
-        self.encountered_funcs.add(call.func.id)
-        for arg in call.args:
-            self.arguments.add(SchedulerRewriter.subscript_name(arg))
-
-    def generic_visit(self, node):
-        super(NodeTransformer, self).generic_visit(node)
-        if hasattr(node, 'body'):
-            returns = [i for i, child in enumerate(node.body) if type(child) is ast.Return]
-            if len(returns) > 0:
-                for wait in self.get_waits():
-                    node.body.insert(returns[0], wait)
-            inserts = []
-            for i, child in enumerate(node.body):
-                if type(child) is ast.Expr and self.is_concurrent_call(child.value):
-                    self.encounter_call(child.value)
-                elif self.is_valid_assignment(child):
-                    call = child.value
-                    self.encounter_call(call)
-                    name = child.targets[0].value
-                    self.arguments.add(SchedulerRewriter.subscript_name(name))
-                    index = child.targets[0].slice.value
-                    call.func = ast.Attribute(call.func, 'assign', ast.Load())
-                    call.args = [ast.Tuple([name, index], ast.Load())] + call.args
-                    node.body[i] = ast.Expr(call)
-                elif self.references_arg(child):
-                    inserts.insert(0, i)
-            for index in inserts:
-                for wait in self.get_waits():
-                    node.body.insert(index, wait)
-
-    def get_waits(self):
-        return [ast.Expr(ast.Call(ast.Attribute(ast.Name(fname, ast.Load()), 'wait', ast.Load()), [], [], None, None)) for fname in self.encountered_funcs]
-
-    def visit_FunctionDef(self, node):
-        node.decorator_list = []
-        self.generic_visit(node)
-        node.body += self.get_waits()
-        return node
 
 
 class synchronized(object):
@@ -116,12 +43,12 @@ class synchronized(object):
             source = "".join(source[0])
             fast = ast.parse(source)
             node = fast
-            rewriter = SchedulerRewriter(concurrent.functions.keys())
+            rewriter = astutil.SchedulerRewriter(concurrent.functions.keys())
             rewriter.visit(node.body[0])
             ast.fix_missing_locations(node)
             out = compile(node, "<string>", "exec")
-            exec out in self.orig_f.func_globals
-            self.f = self.orig_f.func_globals[self.orig_f.__name__]
+            exec(out, self.orig_f.__globals__)
+            self.f = self.orig_f.__globals__[self.orig_f.__name__]
         return self.f(*args, **kwargs)
 
 
