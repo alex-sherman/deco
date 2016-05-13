@@ -2,7 +2,7 @@ Decorated Concurrency
 ===========
 
 A simplified parallel computing model for Python.
-DECO automatically parallelizes Python programs, and requires minimal modifcations to existing serial programs.
+DECO automatically parallelizes Python programs, and requires minimal modifications to existing serial programs.
 
 Install using pip:
 
@@ -13,7 +13,7 @@ pip install deco
 General Usage
 ---------------
 
-Using DECO is as simple as finding, or creating, two functions in your Python program.
+Using DECO is as simple as finding or creating two functions in your Python program.
 The first function is the one we want to run in parallel, and is decorated with `@concurrent`.
 The second function is the function which calls the `@concurrent` function and is decorated with `@synchronized`.
 Decorating the second function is optional, but provides some very cool benefits.
