@@ -2,7 +2,7 @@ Decorated Concurrency
 ===========
 
 A simplified parallel computing model for Python.
-DECO automatically parallelizes Python programs, and requires minimal modifcations to existing serial programs.
+DECO automatically parallelizes Python programs, and requires minimal modifications to existing serial programs.
 
 Install using pip:
 
@@ -23,7 +23,7 @@ Let's take a look at an example.
 ```python
 @concurrent # We add this for the concurrent function
 def process_lat_lon(lat, lon, data):
-  #Does some work
+  #Does some work which takes a while
   return result
 
 @synchronized # And we add this for the function which calls the concurrent function
@@ -41,11 +41,21 @@ Now this program will make use of all the cores on the machine it's running on, 
 What it does
 -------------
 
- - The `@concurrent` decorator uses multiprocessing.pool to parallelize calls to the target function
- - Indexed based mutation of function arguments is handled automatically, which pool cannot do
- - The `@synchronized` decorator automatically inserts synchronization events 
- - It also automatically refactors assignments of the results of `@concurrent` function calls to happen during synchronization events
- 
+  - The `@concurrent` decorator uses multiprocessing.pool to parallelize calls to the target function
+  - Indexed based mutation of function arguments is handled automatically, which pool cannot do
+  - The `@synchronized` decorator automatically inserts synchronization events 
+  - It also automatically refactors assignments of the results of `@concurrent` function calls to happen during synchronization events
+
+Limitations
+-------------
+  - The `@concurrent` decorator will only speed up functions that take longer than ~1ms
+    - If they take less time your code will run slower!
+  - The `@synchronized` decorator only works on 'simple' functions, make sure the function meets the following criteria
+    - Only calls, or assigns the result of `@concurrent` functions to indexable objects such as:
+      - concurrent(...)
+      - result[key] = concurrent(...)
+    - Never indirectly reads objects that get assigned to by calls of the `@concurrent` function
+
 How it works
 -------------
 
