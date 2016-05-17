@@ -69,7 +69,8 @@ class concurrent(object):
         self.pool = None
 
     def replaceWithProxies(self, args):
-        for i, arg in enumerate(args):
+        args_iter = args.iteritems() if type(args) is dict else enumerate(args)
+        for i, arg in args_iter:
             if type(arg) is dict or type(arg) is list:
                 if not id(arg) in self.arg_proxies:
                     self.arg_proxies[id(arg)] = argProxy(id(arg), arg)
@@ -79,10 +80,10 @@ class concurrent(object):
         concurrent.functions[f.__name__] = f
         self.f_name = f.__name__
 
-    def assign(self, target, *args):
-        self.assigns.append((target, self(*args)))
+    def assign(self, target, *args, **kwargs):
+        self.assigns.append((target, self(*args, **kwargs)))
 
-    def __call__(self, *args):
+    def __call__(self, *args, **kwargs):
         if len(args) > 0 and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
             return self
