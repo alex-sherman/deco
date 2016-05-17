@@ -61,7 +61,7 @@ class SchedulerRewriter(NodeTransformer):
 
     def generic_visit(self, node):
         super(NodeTransformer, self).generic_visit(node)
-        if hasattr(node, 'body'):
+        if hasattr(node, 'body') and type(node.body) is list:
             returns = [i for i, child in enumerate(node.body) if type(child) is ast.Return]
             if len(returns) > 0:
                 for wait in self.get_waits():

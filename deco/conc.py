@@ -36,19 +36,20 @@ class synchronized(object):
     def __init__(self, f):
         self.orig_f = f
         self.f = None
+        self.ast = None
 
     def __call__(self, *args, **kwargs):
         if self.f is None:
             source = inspect.getsourcelines(self.orig_f)
             source = "".join(source[0])
-            fast = ast.parse(source)
-            node = fast
+            self.ast = ast.parse(source)
             rewriter = astutil.SchedulerRewriter(concurrent.functions.keys())
-            rewriter.visit(node.body[0])
-            ast.fix_missing_locations(node)
-            out = compile(node, "<string>", "exec")
-            exec(out, self.orig_f.__globals__)
-            self.f = self.orig_f.__globals__[self.orig_f.__name__]
+            rewriter.visit(self.ast.body[0])
+            ast.fix_missing_locations(self.ast)
+            out = compile(self.ast, "<string>", "exec")
+            scope = dict(self.orig_f.__globals__)
+            exec(out, scope)
+            self.f = scope[self.orig_f.__name__]
         return self.f(*args, **kwargs)
 
 
