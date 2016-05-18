@@ -5,8 +5,8 @@ from . import astutil
 import types
 
 
-def concWrapper(f, args):
-    result = concurrent.functions[f](*args)
+def concWrapper(f, args, kwargs):
+    result = concurrent.functions[f](*args, **kwargs)
     operations = [inner for outer in args if type(outer) is argProxy for inner in outer.operations]
     return result, operations
 
@@ -56,18 +56,29 @@ class synchronized(object):
 class concurrent(object):
     functions = {}
 
+    @staticmethod
+    def custom(constructor = None, apply_async = None):
+        def _custom_concurrent(*args, **kwargs):
+            conc = concurrent(*args, **kwargs)
+            if constructor is not None: conc.conc_constructor = constructor
+            if apply_async is not None: conc.apply_async = apply_async
+            return conc
+        return _custom_concurrent
+
     def __init__(self, *args, **kwargs):
-        self.pool_args = []
-        self.pool_kwargs = {}
+        self.conc_args = []
+        self.conc_kwargs = {}
         if len(args) > 0 and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
         else:
-            self.pool_args = args
-            self.pool_kwargs = kwargs
+            self.conc_args = args
+            self.conc_kwargs = kwargs
         self.results = []
         self.assigns = []
         self.arg_proxies = {}
-        self.pool = None
+        self.conc_constructor = Pool
+        self.apply_async = lambda self, function, args: self.concurrency.apply_async(function, args)
+        self.concurrency = None
 
     def replaceWithProxies(self, args):
         args_iter = args.iteritems() if type(args) is dict else enumerate(args)
@@ -88,11 +99,12 @@ class concurrent(object):
         if len(args) > 0 and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
             return self
-        if self.pool is None:
-            self.pool = Pool(*self.pool_args, **self.pool_kwargs)
+        if self.concurrency is None:
+            self.concurrency = self.conc_constructor(*self.conc_args, **self.conc_kwargs)
         args = list(args)
         self.replaceWithProxies(args)
-        result = self.pool.apply_async(concWrapper, [self.f_name, args])
+        self.replaceWithProxies(kwargs)
+        result = self.apply_async(self, concWrapper, [self.f_name, args, kwargs])
         self.results.append(result)
         return result
 

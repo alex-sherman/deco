@@ -2,7 +2,7 @@ import ast
 from ast import NodeTransformer
 import sys
 
-def Call(func, args = None, kwargs = None):
+def Call(func, args=None, kwargs=None):
     if args is None:
         args = []
     if kwargs is None:
@@ -56,7 +56,7 @@ class SchedulerRewriter(NodeTransformer):
         self.encountered_funcs.add(call.func.id)
         for arg in call.args:
             arg_name = SchedulerRewriter.top_level_name(arg)
-            if not arg_name is None:
+            if arg_name is not None:
                 self.arguments.add(arg_name)
 
     def generic_visit(self, node):
