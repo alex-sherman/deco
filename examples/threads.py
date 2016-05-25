@@ -1,11 +1,8 @@
 from __future__ import print_function
 from deco import *
 import time
-from multiprocessing.pool import ThreadPool
 
-threaded = concurrent.custom(ThreadPool)
-
-@threaded
+@concurrent.threaded
 def threaded_func():
     time.sleep(0.1)
 

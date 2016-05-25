@@ -1,4 +1,5 @@
 from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool
 import inspect
 import ast
 from . import astutil
@@ -58,6 +59,7 @@ class concurrent(object):
 
     @staticmethod
     def custom(constructor = None, apply_async = None):
+        @staticmethod
         def _custom_concurrent(*args, **kwargs):
             conc = concurrent(*args, **kwargs)
             if constructor is not None: conc.conc_constructor = constructor
@@ -104,21 +106,31 @@ class concurrent(object):
         args = list(args)
         self.replaceWithProxies(args)
         self.replaceWithProxies(kwargs)
-        result = self.apply_async(self, concWrapper, [self.f_name, args, kwargs])
+        result = ConcurrentResult(self, self.apply_async(self, concWrapper, [self.f_name, args, kwargs]))
         self.results.append(result)
         return result
 
-    def process_operation_queue(self, ops):
+    def apply_operations(self, ops):
         for arg_id, key, value in ops:
             self.arg_proxies[arg_id].value.__setitem__(key, value)
 
     def wait(self):
         results = []
         while len(self.results) > 0:
-            result, operations = self.results.pop().get()
-            self.process_operation_queue(operations)
-            results.append(result)
+            results.append(self.results.pop().get())
         for assign in self.assigns:
-            assign[0][0][assign[0][1]] = assign[1].get()[0]
+            assign[0][0][assign[0][1]] = assign[1].get()
         self.arg_proxies = {}
         return results
+
+concurrent.threaded = concurrent.custom(ThreadPool)
+
+class ConcurrentResult(object):
+    def __init__(self, decorator, async_result):
+        self.decorator = decorator
+        self.async_result = async_result
+
+    def get(self):
+        result, operations = self.async_result.get()
+        self.decorator.apply_operations(operations)
+        return result
