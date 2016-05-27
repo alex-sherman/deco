@@ -8,7 +8,7 @@ import types
 
 def concWrapper(f, args, kwargs):
     result = concurrent.functions[f](*args, **kwargs)
-    operations = [inner for outer in args if type(outer) is argProxy for inner in outer.operations]
+    operations = [inner for outer in args + list(kwargs.values()) if type(outer) is argProxy for inner in outer.operations]
     return result, operations
 
 
@@ -83,7 +83,7 @@ class concurrent(object):
         self.concurrency = None
 
     def replaceWithProxies(self, args):
-        args_iter = args.iteritems() if type(args) is dict else enumerate(args)
+        args_iter = args.items() if type(args) is dict else enumerate(args)
         for i, arg in args_iter:
             if type(arg) is dict or type(arg) is list:
                 if not id(arg) in self.arg_proxies:
