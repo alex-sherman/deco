@@ -68,6 +68,7 @@ class concurrent(object):
         return _custom_concurrent
 
     def __init__(self, *args, **kwargs):
+        self.in_progress = False
         self.conc_args = []
         self.conc_kwargs = {}
         if len(args) > 0 and isinstance(args[0], types.FunctionType):
@@ -101,6 +102,7 @@ class concurrent(object):
         if len(args) > 0 and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
             return self
+        self.in_progress = True
         if self.concurrency is None:
             self.concurrency = self.conc_constructor(*self.conc_args, **self.conc_kwargs)
         args = list(args)
@@ -121,6 +123,7 @@ class concurrent(object):
         for assign in self.assigns:
             assign[0][0][assign[0][1]] = assign[1].get()
         self.arg_proxies = {}
+        self.in_progress = False
         return results
 
 concurrent.threaded = concurrent.custom(ThreadPool)
