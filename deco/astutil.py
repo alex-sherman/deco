@@ -2,6 +2,12 @@ import ast
 from ast import NodeTransformer
 import sys
 
+def unindent(source_lines):
+    for i, line in enumerate(source_lines):
+        source_lines[i] = line.lstrip()
+        if source_lines[i][:3] == "def":
+            break
+
 def Call(func, args=None, kwargs=None):
     if args is None:
         args = []

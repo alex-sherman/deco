@@ -13,6 +13,13 @@ def body_cases():
     a = True if False else False
     b = (lambda : True)()
 
+def indented():
+    @synchronized
+    def _indented():
+        return conc_func()
+
+    return _indented()
+
 @synchronized
 def subscript_args():
     d = type('', (object,), {"items": {(0,0): 0}})()
@@ -26,6 +33,10 @@ class TestAST(unittest.TestCase):
     #This just shouldn't throw any exceptions
     def test_body_cases(self):
         body_cases()
+
+    #This just shouldn't throw any exceptions
+    def test_indent_cases(self):
+        indented()
 
     def test_subscript_args(self):
         self.assertFalse(subscript_args())

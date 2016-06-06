@@ -39,10 +39,14 @@ class synchronized(object):
         self.f = None
         self.ast = None
 
+    def __get__(self, *args):
+        raise NotImplementedError("Decorators from deco cannot be used on class methods")
+
     def __call__(self, *args, **kwargs):
         if self.f is None:
-            source = inspect.getsourcelines(self.orig_f)
-            source = "".join(source[0])
+            source = inspect.getsourcelines(self.orig_f)[0]
+            astutil.unindent(source)
+            source = "".join(source)
             self.ast = ast.parse(source)
             rewriter = astutil.SchedulerRewriter(concurrent.functions.keys())
             rewriter.visit(self.ast.body[0])
@@ -82,6 +86,9 @@ class concurrent(object):
         self.conc_constructor = Pool
         self.apply_async = lambda self, function, args: self.concurrency.apply_async(function, args)
         self.concurrency = None
+
+    def __get__(self, *args):
+        raise NotImplementedError("Decorators from deco cannot be used on class methods")
 
     def replaceWithProxies(self, args):
         args_iter = args.items() if type(args) is dict else enumerate(args)
