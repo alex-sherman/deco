@@ -129,6 +129,7 @@ class concurrent(object):
             results.append(self.results.pop().get())
         for assign in self.assigns:
             assign[0][0][assign[0][1]] = assign[1].get()
+        self.assigns = []
         self.arg_proxies = {}
         self.in_progress = False
         return results
