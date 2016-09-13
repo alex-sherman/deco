@@ -1,7 +1,8 @@
 from __future__ import print_function
 
-import deco
 import time
+
+import deco
 
 
 @deco.concurrent

@@ -1,12 +1,15 @@
 import ast
-from ast import NodeTransformer
 import sys
+
+from ast import NodeTransformer
+
 
 def unindent(source_lines):
     for i, line in enumerate(source_lines):
         source_lines[i] = line.lstrip()
         if source_lines[i][:3] == "def":
             break
+
 
 def Call(func, args=None, kwargs=None):
     if args is None:
@@ -17,6 +20,7 @@ def Call(func, args=None, kwargs=None):
         return ast.Call(func, args, kwargs)
     else:
         return ast.Call(func, args, kwargs, None, None)
+
 
 class SchedulerRewriter(NodeTransformer):
     def __init__(self, concurrent_funcs):
@@ -30,7 +34,8 @@ class SchedulerRewriter(NodeTransformer):
         if type(node) is ast.Name:
             return type(node.ctx) is ast.Load and node.id in self.arguments
         for field in node._fields:
-            if field == "body": continue
+            if field == "body":
+                continue
             value = getattr(node, field)
             if not hasattr(value, "__iter__"):
                 value = [value]
@@ -62,14 +67,14 @@ class SchedulerRewriter(NodeTransformer):
         self.encountered_funcs.add(call.func.id)
         for arg in call.args:
             arg_name = SchedulerRewriter.top_level_name(arg)
-            if arg_name is not None:
+            if arg_name:
                 self.arguments.add(arg_name)
 
     def generic_visit(self, node):
         super(NodeTransformer, self).generic_visit(node)
         if hasattr(node, 'body') and type(node.body) is list:
             returns = [i for i, child in enumerate(node.body) if type(child) is ast.Return]
-            if len(returns) > 0:
+            if len(returns):
                 for wait in self.get_waits():
                     node.body.insert(returns[0], wait)
             inserts = []
@@ -92,7 +97,8 @@ class SchedulerRewriter(NodeTransformer):
                     node.body.insert(index, wait)
 
     def get_waits(self):
-        return [ast.Expr(Call(ast.Attribute(ast.Name(fname, ast.Load()), 'wait', ast.Load()))) for fname in self.encountered_funcs]
+        return [ast.Expr(Call(ast.Attribute(ast.Name(fname, ast.Load()), 'wait', ast.Load()))) for fname in
+                self.encountered_funcs]
 
     def visit_FunctionDef(self, node):
         node.decorator_list = []

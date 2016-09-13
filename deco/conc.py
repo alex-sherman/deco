@@ -1,14 +1,17 @@
+import ast
+import inspect
+import types
+
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
-import inspect
-import ast
+
 from . import astutil
-import types
 
 
 def concWrapper(f, args, kwargs):
     result = concurrent.functions[f](*args, **kwargs)
-    operations = [inner for outer in args + list(kwargs.values()) if type(outer) is argProxy for inner in outer.operations]
+    operations = [inner for outer in args + list(kwargs.values()) if type(outer) is argProxy for inner in
+                  outer.operations]
     return result, operations
 
 
@@ -43,7 +46,7 @@ class synchronized(object):
         raise NotImplementedError("Decorators from deco cannot be used on class methods")
 
     def __call__(self, *args, **kwargs):
-        if self.f is None:
+        if not self.f:
             source = inspect.getsourcelines(self.orig_f)[0]
             astutil.unindent(source)
             source = "".join(source)
@@ -53,7 +56,7 @@ class synchronized(object):
             ast.fix_missing_locations(self.ast)
             out = compile(self.ast, "<string>", "exec")
             scope = dict(self.orig_f.__globals__)
-            exec(out, scope)
+            exec (out, scope)
             self.f = scope[self.orig_f.__name__]
         return self.f(*args, **kwargs)
 
@@ -62,20 +65,23 @@ class concurrent(object):
     functions = {}
 
     @staticmethod
-    def custom(constructor = None, apply_async = None):
-        @staticmethod
+    def custom(constructor=None, apply_async=None):
         def _custom_concurrent(*args, **kwargs):
             conc = concurrent(*args, **kwargs)
-            if constructor is not None: conc.conc_constructor = constructor
-            if apply_async is not None: conc.apply_async = apply_async
+            if constructor:
+                conc.conc_constructor = constructor
+            if apply_async:
+                conc.apply_async = apply_async
             return conc
+
         return _custom_concurrent
 
     def __init__(self, *args, **kwargs):
+        self.f_name = None
         self.in_progress = False
         self.conc_args = []
         self.conc_kwargs = {}
-        if len(args) > 0 and isinstance(args[0], types.FunctionType):
+        if len(args) and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
         else:
             self.conc_args = args
@@ -106,7 +112,7 @@ class concurrent(object):
         self.assigns.append((target, self(*args, **kwargs)))
 
     def __call__(self, *args, **kwargs):
-        if len(args) > 0 and isinstance(args[0], types.FunctionType):
+        if len(args) and isinstance(args[0], types.FunctionType):
             self.setFunction(args[0])
             return self
         self.in_progress = True
@@ -125,7 +131,7 @@ class concurrent(object):
 
     def wait(self):
         results = []
-        while len(self.results) > 0:
+        while len(self.results):
             results.append(self.results.pop().get())
         for assign in self.assigns:
             assign[0][0][assign[0][1]] = assign[1].get()
@@ -134,7 +140,9 @@ class concurrent(object):
         self.in_progress = False
         return results
 
+
 concurrent.threaded = concurrent.custom(ThreadPool)
+
 
 class ConcurrentResult(object):
     def __init__(self, decorator, async_result):
