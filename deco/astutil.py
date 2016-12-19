@@ -1,5 +1,5 @@
 import ast
-from ast import NodeTransformer
+from ast import NodeTransformer, copy_location
 import sys
 
 def unindent(source_lines):
@@ -66,36 +66,46 @@ class SchedulerRewriter(NodeTransformer):
                 self.arguments.add(arg_name)
 
     def generic_visit(self, node):
-        super(NodeTransformer, self).generic_visit(node)
+        node = NodeTransformer.generic_visit(self, node)
         if hasattr(node, 'body') and type(node.body) is list:
             returns = [i for i, child in enumerate(node.body) if type(child) is ast.Return]
             if len(returns) > 0:
                 for wait in self.get_waits():
                     node.body.insert(returns[0], wait)
-            inserts = []
-            for i, child in enumerate(node.body):
-                if type(child) is ast.Expr and self.is_concurrent_call(child.value):
-                    self.encounter_call(child.value)
-                elif self.is_valid_assignment(child):
-                    call = child.value
-                    self.encounter_call(call)
-                    name = child.targets[0].value
-                    self.arguments.add(SchedulerRewriter.top_level_name(name))
-                    index = child.targets[0].slice.value
-                    call.func = ast.Attribute(call.func, 'assign', ast.Load())
-                    call.args = [ast.Tuple([name, index], ast.Load())] + call.args
-                    node.body[i] = ast.Expr(call)
-                elif self.references_arg(child):
-                    inserts.insert(0, i)
-            for index in inserts:
-                for wait in self.get_waits():
-                    node.body.insert(index, wait)
+        return node
 
     def get_waits(self):
         return [ast.Expr(Call(ast.Attribute(ast.Name(fname, ast.Load()), 'wait', ast.Load()))) for fname in self.encountered_funcs]
 
+    def visit_Call(self, node):
+        node = self.generic_visit(node)
+        if self.is_concurrent_call(node):
+            self.encounter_call(node)
+        elif any([self.is_concurrent_call(arg) for arg in node.args]):
+            conc_args = [(i, arg) for i, arg in enumerate(node.args) if self.is_concurrent_call(arg)]
+            if len(conc_args) > 1:
+                raise Exception("Deco doesn't support functions with multiple @concurrent parameters")
+            conc_call = conc_args[0][1]
+            node.args[conc_args[0][0]] = ast.Name("__value__", ast.Load())
+            call_lambda = ast.Lambda(ast.arguments(args = [ast.Name("__value__", ast.Param())], defaults = []), node)
+            return copy_location(ast.Call(func = ast.Attribute(conc_call.func, 'call', ast.Load()),
+                args = [call_lambda] + conc_call.args, keywords = []), node)
+        return node
+
+    def visit_Assign(self, node):
+        if self.is_valid_assignment(node):
+            call = node.value
+            self.encounter_call(call)
+            name = node.targets[0].value
+            self.arguments.add(SchedulerRewriter.top_level_name(name))
+            index = node.targets[0].slice.value
+            call.func = ast.Attribute(call.func, 'assign', ast.Load())
+            call.args = [ast.Tuple([name, index], ast.Load())] + call.args
+            return copy_location(ast.Expr(call), node)
+        return node
+
     def visit_FunctionDef(self, node):
         node.decorator_list = []
-        self.generic_visit(node)
+        node = self.generic_visit(node)
         node.body += self.get_waits()
         return node

@@ -82,6 +82,7 @@ class concurrent(object):
             self.conc_kwargs = kwargs
         self.results = []
         self.assigns = []
+        self.calls = []
         self.arg_proxies = {}
         self.conc_constructor = Pool
         self.apply_async = lambda self, function, args: self.concurrency.apply_async(function, args)
@@ -104,6 +105,9 @@ class concurrent(object):
 
     def assign(self, target, *args, **kwargs):
         self.assigns.append((target, self(*args, **kwargs)))
+
+    def call(self, target, *args, **kwargs):
+        self.calls.append((target, self(*args, **kwargs)))
 
     def __call__(self, *args, **kwargs):
         if len(args) > 0 and isinstance(args[0], types.FunctionType):
@@ -130,6 +134,9 @@ class concurrent(object):
         for assign in self.assigns:
             assign[0][0][assign[0][1]] = assign[1].get()
         self.assigns = []
+        for call in self.calls:
+            call[0](call[1].get())
+        self.calls = []
         self.arg_proxies = {}
         self.in_progress = False
         return results
