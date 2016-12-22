@@ -35,6 +35,9 @@ class argProxy(object):
 
 class synchronized(object):
     def __init__(self, f):
+        callerframerecord = inspect.stack()[1][0]
+        info = inspect.getframeinfo(callerframerecord)
+        self.frame_info = info
         self.orig_f = f
         self.f = None
         self.ast = None
@@ -48,7 +51,7 @@ class synchronized(object):
             astutil.unindent(source)
             source = "".join(source)
             self.ast = ast.parse(source)
-            rewriter = astutil.SchedulerRewriter(concurrent.functions.keys())
+            rewriter = astutil.SchedulerRewriter(concurrent.functions.keys(), self.frame_info)
             rewriter.visit(self.ast.body[0])
             ast.fix_missing_locations(self.ast)
             out = compile(self.ast, "<string>", "exec")
