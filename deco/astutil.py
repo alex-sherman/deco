@@ -103,7 +103,7 @@ class SchedulerRewriter(NodeTransformer):
                 call_lambda = ast.Lambda(ast.arguments(args = args, defaults = [], kwonlyargs = [], kw_defaults = []), call)
                 return copy_location(ast.Expr(ast.Call(func = ast.Attribute(conc_call.func, 'call', ast.Load()),
                     args = [call_lambda] + conc_call.args, keywords = [])), node)
-        elif self.references_arg(node):
+        if self.references_arg(node):
             return self.get_waits() + [node]
         return self.generic_visit(node)
 
