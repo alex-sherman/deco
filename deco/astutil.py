@@ -76,16 +76,6 @@ class SchedulerRewriter(NodeTransformer):
     def visit_Call(self, node):
         if self.is_concurrent_call(node):
             raise self.not_implemented_error(node, "The usage of the @concurrent function is unsupported")
-        elif any([self.is_concurrent_call(arg) for arg in node.args]):
-            conc_args = [(i, arg) for i, arg in enumerate(node.args) if self.is_concurrent_call(arg)]
-            if len(conc_args) > 1:
-                raise self.not_implemented_error(node, "Functions with multiple @concurrent parameters are unsupported")
-            conc_call = conc_args[0][1]
-            self.encounter_call(conc_call)
-            node.args[conc_args[0][0]] = ast.Name("__value__", ast.Load())
-            call_lambda = ast.Lambda(ast.arguments(args = [ast.Name("__value__", ast.Param())], defaults = []), node)
-            return copy_location(ast.Call(func = ast.Attribute(conc_call.func, 'call', ast.Load()),
-                args = [call_lambda] + conc_call.args, keywords = []), node)
         node = self.generic_visit(node)
         return node
 
@@ -94,9 +84,21 @@ class SchedulerRewriter(NodeTransformer):
         return self.get_waits() + [node]
 
     def visit_Expr(self, node):
-        if type(node.value) is ast.Call and self.is_concurrent_call(node.value):
-            self.encounter_call(node.value)
-            return node
+        if type(node.value) is ast.Call:
+            call = node.value
+            if self.is_concurrent_call(call):
+                self.encounter_call(call)
+                return node
+            elif any([self.is_concurrent_call(arg) for arg in call.args]):
+                conc_args = [(i, arg) for i, arg in enumerate(call.args) if self.is_concurrent_call(arg)]
+                if len(conc_args) > 1:
+                    raise self.not_implemented_error(call, "Functions with multiple @concurrent parameters are unsupported")
+                conc_call = conc_args[0][1]
+                self.encounter_call(conc_call)
+                call.args[conc_args[0][0]] = ast.Name("__value__", ast.Load())
+                call_lambda = ast.Lambda(ast.arguments(args = [ast.Name("__value__", ast.Param())], defaults = []), call)
+                return copy_location(ast.Expr(ast.Call(func = ast.Attribute(conc_call.func, 'call', ast.Load()),
+                    args = [call_lambda] + conc_call.args, keywords = [])), node)
         elif self.references_arg(node):
             return self.get_waits() + [node]
         return self.generic_visit(node)
