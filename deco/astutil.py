@@ -96,7 +96,11 @@ class SchedulerRewriter(NodeTransformer):
                 conc_call = conc_args[0][1]
                 self.encounter_call(conc_call)
                 call.args[conc_args[0][0]] = ast.Name("__value__", ast.Load())
-                call_lambda = ast.Lambda(ast.arguments(args = [ast.Name("__value__", ast.Param())], defaults = []), call)
+                if sys.version_info >= (3, 0):
+                    args = [ast.arg("__value__", None)]
+                else:
+                    args = [ast.Name("__value__", ast.Param())]
+                call_lambda = ast.Lambda(ast.arguments(args = args, defaults = [], kwonlyargs = [], kw_defaults = []), call)
                 return copy_location(ast.Expr(ast.Call(func = ast.Attribute(conc_call.func, 'call', ast.Load()),
                     args = [call_lambda] + conc_call.args, keywords = [])), node)
         elif self.references_arg(node):
