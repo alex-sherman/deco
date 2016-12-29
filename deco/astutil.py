@@ -1,5 +1,5 @@
 import ast
-from ast import NodeTransformer
+from ast import NodeTransformer, copy_location
 import sys
 
 def unindent(source_lines):
@@ -19,10 +19,12 @@ def Call(func, args=None, kwargs=None):
         return ast.Call(func, args, kwargs, None, None)
 
 class SchedulerRewriter(NodeTransformer):
-    def __init__(self, concurrent_funcs):
+    def __init__(self, concurrent_funcs, frameinfo):
         self.arguments = set()
         self.concurrent_funcs = concurrent_funcs
         self.encountered_funcs = set()
+        self.line_offset = frameinfo.lineno - 1
+        self.filename = frameinfo.filename
 
     def references_arg(self, node):
         if not isinstance(node, ast.AST):
@@ -37,6 +39,9 @@ class SchedulerRewriter(NodeTransformer):
             if any([self.references_arg(child) for child in value]):
                 return True
         return False
+
+    def not_implemented_error(self, node, message):
+        return NotImplementedError(self.filename + "(" + str(node.lineno + self.line_offset) + ") " + message)
 
     @staticmethod
     def top_level_name(node):
@@ -53,9 +58,9 @@ class SchedulerRewriter(NodeTransformer):
         if not (type(node) is ast.Assign and self.is_concurrent_call(node.value)):
             return False
         if len(node.targets) != 1:
-            raise ValueError("Concurrent assignment does not support multiple assignment targets")
+            raise self.not_implemented_error(node, "Concurrent assignment does not support multiple assignment targets")
         if not type(node.targets[0]) is ast.Subscript:
-            raise ValueError("Concurrent assignment only valid for index based objects")
+            raise self.not_implemented_error(node, "Concurrent assignment only implemented for index based objects")
         return True
 
     def encounter_call(self, call):
@@ -65,37 +70,58 @@ class SchedulerRewriter(NodeTransformer):
             if arg_name is not None:
                 self.arguments.add(arg_name)
 
-    def generic_visit(self, node):
-        super(NodeTransformer, self).generic_visit(node)
-        if hasattr(node, 'body') and type(node.body) is list:
-            returns = [i for i, child in enumerate(node.body) if type(child) is ast.Return]
-            if len(returns) > 0:
-                for wait in self.get_waits():
-                    node.body.insert(returns[0], wait)
-            inserts = []
-            for i, child in enumerate(node.body):
-                if type(child) is ast.Expr and self.is_concurrent_call(child.value):
-                    self.encounter_call(child.value)
-                elif self.is_valid_assignment(child):
-                    call = child.value
-                    self.encounter_call(call)
-                    name = child.targets[0].value
-                    self.arguments.add(SchedulerRewriter.top_level_name(name))
-                    index = child.targets[0].slice.value
-                    call.func = ast.Attribute(call.func, 'assign', ast.Load())
-                    call.args = [ast.Tuple([name, index], ast.Load())] + call.args
-                    node.body[i] = ast.Expr(call)
-                elif self.references_arg(child):
-                    inserts.insert(0, i)
-            for index in inserts:
-                for wait in self.get_waits():
-                    node.body.insert(index, wait)
-
     def get_waits(self):
         return [ast.Expr(Call(ast.Attribute(ast.Name(fname, ast.Load()), 'wait', ast.Load()))) for fname in self.encountered_funcs]
 
+    def visit_Call(self, node):
+        if self.is_concurrent_call(node):
+            raise self.not_implemented_error(node, "The usage of the @concurrent function is unsupported")
+        node = self.generic_visit(node)
+        return node
+
+    def visit_Return(self, node):
+        node = self.generic_visit(node)
+        return self.get_waits() + [node]
+
+    def visit_Expr(self, node):
+        if type(node.value) is ast.Call:
+            call = node.value
+            if self.is_concurrent_call(call):
+                self.encounter_call(call)
+                return node
+            elif any([self.is_concurrent_call(arg) for arg in call.args]):
+                conc_args = [(i, arg) for i, arg in enumerate(call.args) if self.is_concurrent_call(arg)]
+                if len(conc_args) > 1:
+                    raise self.not_implemented_error(call, "Functions with multiple @concurrent parameters are unsupported")
+                conc_call = conc_args[0][1]
+                self.encounter_call(conc_call)
+                call.args[conc_args[0][0]] = ast.Name("__value__", ast.Load())
+                if sys.version_info >= (3, 0):
+                    args = [ast.arg("__value__", None)]
+                else:
+                    args = [ast.Name("__value__", ast.Param())]
+                call_lambda = ast.Lambda(ast.arguments(args = args, defaults = [], kwonlyargs = [], kw_defaults = []), call)
+                return copy_location(ast.Expr(ast.Call(func = ast.Attribute(conc_call.func, 'call', ast.Load()),
+                    args = [call_lambda] + conc_call.args, keywords = [])), node)
+        if self.references_arg(node):
+            return self.get_waits() + [node]
+        return self.generic_visit(node)
+
+    def visit_Assign(self, node):
+        if self.is_valid_assignment(node):
+            call = node.value
+            self.encounter_call(call)
+            name = node.targets[0].value
+            self.arguments.add(SchedulerRewriter.top_level_name(name))
+            index = node.targets[0].slice.value
+            call.func = ast.Attribute(call.func, 'assign', ast.Load())
+            call.args = [ast.Tuple([name, index], ast.Load())] + call.args
+            return copy_location(ast.Expr(call), node)
+        node = self.generic_visit(node)
+        return node
+
     def visit_FunctionDef(self, node):
         node.decorator_list = []
-        self.generic_visit(node)
+        node = self.generic_visit(node)
         node.body += self.get_waits()
         return node

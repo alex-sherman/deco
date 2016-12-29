@@ -16,7 +16,7 @@ def body_cases():
 def indented():
     @synchronized
     def _indented():
-        return conc_func()
+        conc_func()
 
     return _indented()
 

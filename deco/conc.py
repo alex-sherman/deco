@@ -35,6 +35,9 @@ class argProxy(object):
 
 class synchronized(object):
     def __init__(self, f):
+        callerframerecord = inspect.stack()[1][0]
+        info = inspect.getframeinfo(callerframerecord)
+        self.frame_info = info
         self.orig_f = f
         self.f = None
         self.ast = None
@@ -48,7 +51,7 @@ class synchronized(object):
             astutil.unindent(source)
             source = "".join(source)
             self.ast = ast.parse(source)
-            rewriter = astutil.SchedulerRewriter(concurrent.functions.keys())
+            rewriter = astutil.SchedulerRewriter(concurrent.functions.keys(), self.frame_info)
             rewriter.visit(self.ast.body[0])
             ast.fix_missing_locations(self.ast)
             out = compile(self.ast, "<string>", "exec")
@@ -82,6 +85,7 @@ class concurrent(object):
             self.conc_kwargs = kwargs
         self.results = []
         self.assigns = []
+        self.calls = []
         self.arg_proxies = {}
         self.conc_constructor = Pool
         self.apply_async = lambda self, function, args: self.concurrency.apply_async(function, args)
@@ -104,6 +108,9 @@ class concurrent(object):
 
     def assign(self, target, *args, **kwargs):
         self.assigns.append((target, self(*args, **kwargs)))
+
+    def call(self, target, *args, **kwargs):
+        self.calls.append((target, self(*args, **kwargs)))
 
     def __call__(self, *args, **kwargs):
         if len(args) > 0 and isinstance(args[0], types.FunctionType):
@@ -130,6 +137,9 @@ class concurrent(object):
         for assign in self.assigns:
             assign[0][0][assign[0][1]] = assign[1].get()
         self.assigns = []
+        for call in self.calls:
+            call[0](call[1].get())
+        self.calls = []
         self.arg_proxies = {}
         self.in_progress = False
         return results
