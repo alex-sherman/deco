@@ -4,7 +4,7 @@ from distutils.core import setup
 
 setup(
   name = "deco",
-  version = "0.4.1",
+  version = "0.5",
   description = "A decorator for concurrency",
   packages = ["deco"],
   author='Alex Sherman',
