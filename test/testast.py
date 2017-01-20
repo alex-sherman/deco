@@ -26,7 +26,8 @@ def subscript_args():
     conc_func(d.items[0, 0])
     #Read d to force a synchronization event
     d = d
-    return conc_func.in_progress
+    output = conc_func.in_progress
+    return output
 
 class TestAST(unittest.TestCase):
 

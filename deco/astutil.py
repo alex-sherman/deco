@@ -79,9 +79,13 @@ class SchedulerRewriter(NodeTransformer):
         node = self.generic_visit(node)
         return node
 
+    def generic_visit(self, node):
+        if isinstance(node, ast.stmt) and self.references_arg(node):
+            return self.get_waits() + [node]
+        return NodeTransformer.generic_visit(self, node)
+
     def visit_Return(self, node):
-        node = self.generic_visit(node)
-        return self.get_waits() + [node]
+        return self.get_waits() + [self.generic_visit(node)]
 
     def visit_Expr(self, node):
         if type(node.value) is ast.Call:
@@ -103,8 +107,6 @@ class SchedulerRewriter(NodeTransformer):
                 call_lambda = ast.Lambda(ast.arguments(args = args, defaults = [], kwonlyargs = [], kw_defaults = []), call)
                 return copy_location(ast.Expr(ast.Call(func = ast.Attribute(conc_call.func, 'call', ast.Load()),
                     args = [call_lambda] + conc_call.args, keywords = [])), node)
-        if self.references_arg(node):
-            return self.get_waits() + [node]
         return self.generic_visit(node)
 
     def visit_Assign(self, node):
@@ -117,8 +119,7 @@ class SchedulerRewriter(NodeTransformer):
             call.func = ast.Attribute(call.func, 'assign', ast.Load())
             call.args = [ast.Tuple([name, index], ast.Load())] + call.args
             return copy_location(ast.Expr(call), node)
-        node = self.generic_visit(node)
-        return node
+        return self.generic_visit(node)
 
     def visit_FunctionDef(self, node):
         node.decorator_list = []
