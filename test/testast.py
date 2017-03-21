@@ -13,6 +13,12 @@ def body_cases():
     a = True if False else False
     b = (lambda : True)()
 
+@synchronized
+def tainted_return():
+    data = []
+    data.append(conc_func(data))
+    return data
+
 def indented():
     @synchronized
     def _indented():
@@ -38,6 +44,10 @@ class TestAST(unittest.TestCase):
     #This just shouldn't throw any exceptions
     def test_indent_cases(self):
         indented()
+
+    #This just shouldn't throw any exceptions
+    def test_tainted_return(self):
+        tainted_return()
 
     def test_subscript_args(self):
         self.assertFalse(subscript_args())

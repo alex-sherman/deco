@@ -80,12 +80,9 @@ class SchedulerRewriter(NodeTransformer):
         return node
 
     def generic_visit(self, node):
-        if isinstance(node, ast.stmt) and self.references_arg(node):
+        if (isinstance(node, ast.stmt) and self.references_arg(node)) or isinstance(node, ast.Return):
             return self.get_waits() + [node]
         return NodeTransformer.generic_visit(self, node)
-
-    def visit_Return(self, node):
-        return self.get_waits() + [self.generic_visit(node)]
 
     def visit_Expr(self, node):
         if type(node.value) is ast.Call:
