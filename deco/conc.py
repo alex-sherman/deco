@@ -152,6 +152,6 @@ class ConcurrentResult(object):
         self.async_result = async_result
 
     def get(self):
-        result, operations = self.async_result.get()
+        result, operations = self.async_result.get(3e+6)
         self.decorator.apply_operations(operations)
         return result
