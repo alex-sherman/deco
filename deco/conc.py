@@ -122,7 +122,7 @@ class concurrent(object):
         args = list(args)
         self.replaceWithProxies(args)
         self.replaceWithProxies(kwargs)
-        result = ConcurrentResult(self, self.apply_async(self, concWrapper, [self.f_name, args, kwargs]))
+        result = ConcurrentResult(self.apply_async(self, concWrapper, [self.f_name, args, kwargs]))
         self.results.append(result)
         return result
 
@@ -132,13 +132,15 @@ class concurrent(object):
 
     def wait(self):
         results = []
-        while len(self.results) > 0:
-            results.append(self.results.pop().get())
+        while self.results:
+            result, operations = self.results.pop().get()
+            self.apply_operations(operations)
+            results.append(result)
         for assign in self.assigns:
-            assign[0][0][assign[0][1]] = assign[1].get()
+            assign[0][0][assign[0][1]] = assign[1].result()
         self.assigns = []
         for call in self.calls:
-            call[0](call[1].get())
+            call[0](call[1].result())
         self.calls = []
         self.arg_proxies = {}
         self.in_progress = False
@@ -147,11 +149,11 @@ class concurrent(object):
 concurrent.threaded = concurrent.custom(ThreadPool)
 
 class ConcurrentResult(object):
-    def __init__(self, decorator, async_result):
-        self.decorator = decorator
+    def __init__(self, async_result):
         self.async_result = async_result
 
     def get(self):
-        result, operations = self.async_result.get(3e+6)
-        self.decorator.apply_operations(operations)
-        return result
+        return self.async_result.get(3e+6)
+
+    def result(self):
+        return self.get()[0]
