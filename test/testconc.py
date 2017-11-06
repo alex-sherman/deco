@@ -27,7 +27,7 @@ class TestCONC(unittest.TestCase):
 
     def test_for_loop(self):
         values = range(30)
-        self.assertEqual(values, for_loop(values))
+        self.assertEqual(list(values), for_loop(values))
 
 if __name__ == "__main__":
     unittest.main()

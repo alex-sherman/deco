@@ -102,8 +102,14 @@ class SchedulerRewriter(NodeTransformer):
                 else:
                     args = [ast.Name("__value__", ast.Param())]
                 call_lambda = ast.Lambda(ast.arguments(args = args, defaults = [], kwonlyargs = [], kw_defaults = []), call)
-                return copy_location(ast.Expr(ast.Call(func = ast.Attribute(conc_call.func, 'call', ast.Load()),
-                    args = [call_lambda] + conc_call.args, keywords = [])), node)
+                copy_location_kwargs = {
+                    "func": ast.Attribute(conc_call.func, 'call', ast.Load()),
+                    "args": [call_lambda] + conc_call.args,
+                    "keywords": conc_call.keywords
+                }
+                if(sys.version_info < (3, 0)):
+                    copy_location_kwargs["kwargs"] = conc_call.kwargs
+                return copy_location(ast.Expr(ast.Call(**copy_location_kwargs)), node)
         return self.generic_visit(node)
 
     def visit_Assign(self, node):

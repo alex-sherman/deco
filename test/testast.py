@@ -5,7 +5,7 @@ from deco import *
 
 @concurrent
 def conc_func(*args, **kwargs):
-    pass
+    return kwargs
 
 @synchronized
 def body_cases():
@@ -25,6 +25,12 @@ def indented():
         conc_func()
 
     return _indented()
+
+@synchronized
+def kwarged_sync(**kwargs):
+    data = []
+    data.append(conc_func(**kwargs))
+    return data[0]
 
 @synchronized
 def subscript_args():
@@ -51,6 +57,9 @@ class TestAST(unittest.TestCase):
 
     def test_subscript_args(self):
         self.assertFalse(subscript_args())
+
+    def test_kwarged_sync(self):
+        self.assertTrue(kwarged_sync(test = "test")["test"] == "test")
 
 if __name__ == "__main__":
     unittest.main()
