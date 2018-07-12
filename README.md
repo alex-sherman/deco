@@ -10,6 +10,10 @@ Install using pip:
 pip install deco
 ```
 
+Documentation
+--------------
+You can reference the [Wiki on Github](https://github.com/alex-sherman/deco/wiki) for slightly more in-depth documentation.
+
 General Usage
 ---------------
 
