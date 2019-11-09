@@ -95,6 +95,8 @@ class SchedulerRewriter(NodeTransformer):
                 if len(conc_args) > 1:
                     raise self.not_implemented_error(call, "Functions with multiple @concurrent parameters are unsupported")
                 conc_call = conc_args[0][1]
+                if isinstance(call.func, ast.Attribute):
+                    self.arguments.add(SchedulerRewriter.top_level_name(call.func.value))
                 self.encounter_call(conc_call)
                 call.args[conc_args[0][0]] = ast.Name("__value__", ast.Load())
                 if sys.version_info >= (3, 0):

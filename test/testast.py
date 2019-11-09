@@ -1,10 +1,12 @@
 import unittest
 import ast
 import inspect
+import time
 from deco import *
 
 @concurrent
 def conc_func(*args, **kwargs):
+    time.sleep(0.1)
     return kwargs
 
 @synchronized
@@ -18,6 +20,13 @@ def tainted_return():
     data = []
     data.append(conc_func(data))
     return data
+
+@synchronized
+def len_of_append():
+    data = []
+    data.append(conc_func([]))
+    derp = len(data)
+    return derp
 
 def indented():
     @synchronized
@@ -60,6 +69,9 @@ class TestAST(unittest.TestCase):
 
     def test_kwarged_sync(self):
         self.assertTrue(kwarged_sync(test = "test")["test"] == "test")
+
+    def test_wait_after_append(self):
+        self.assertEqual(len_of_append(), 1)
 
 if __name__ == "__main__":
     unittest.main()
