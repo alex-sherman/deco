@@ -105,6 +105,8 @@ class concurrent(object):
     def setFunction(self, f):
         concurrent.functions[f.__name__] = f
         self.f_name = f.__name__
+        self.__doc__ = f.__doc__
+        self.__module__ = f.__module__
 
     def assign(self, target, *args, **kwargs):
         self.assigns.append((target, self(*args, **kwargs)))
