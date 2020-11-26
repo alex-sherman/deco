@@ -41,6 +41,7 @@ class synchronized(object):
         self.orig_f = f
         self.f = None
         self.ast = None
+        self.__name__ = f.__name__
 
     def __get__(self, *args):
         raise NotImplementedError("Decorators from deco cannot be used on class methods")
@@ -78,7 +79,7 @@ class concurrent(object):
         self.in_progress = False
         self.conc_args = []
         self.conc_kwargs = {}
-        if len(args) > 0 and isinstance(args[0], types.FunctionType):
+        if len(args) > 0 and hasattr(args[0], "__call__") and hasattr(args[0], "__name__"):
             self.setFunction(args[0])
         else:
             self.conc_args = args
