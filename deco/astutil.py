@@ -103,7 +103,7 @@ class SchedulerRewriter(NodeTransformer):
                     args = [ast.arg("__value__", None)]
                 else:
                     args = [ast.Name("__value__", ast.Param())]
-                call_lambda = ast.Lambda(ast.arguments(args = args, defaults = [], kwonlyargs = [], kw_defaults = []), call)
+                call_lambda = ast.Lambda(ast.arguments(posonlyargs = [], args = args, defaults = [], kwonlyargs = [], kw_defaults = []), call)
                 copy_location_kwargs = {
                     "func": ast.Attribute(conc_call.func, 'call', ast.Load()),
                     "args": [call_lambda] + conc_call.args,
