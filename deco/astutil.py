@@ -54,15 +54,6 @@ class SchedulerRewriter(NodeTransformer):
     def is_concurrent_call(self, node):
         return type(node) is ast.Call and type(node.func) is ast.Name and node.func.id in self.concurrent_funcs
 
-    def is_valid_assignment(self, node):
-        if not (type(node) is ast.Assign and self.is_concurrent_call(node.value)):
-            return False
-        if len(node.targets) != 1:
-            raise self.not_implemented_error(node, "Concurrent assignment does not support multiple assignment targets")
-        if not type(node.targets[0]) is ast.Subscript:
-            raise self.not_implemented_error(node, "Concurrent assignment only implemented for index based objects")
-        return True
-
     def encounter_call(self, call):
         self.encountered_funcs.add(call.func.id)
         for arg in call.args:
@@ -84,6 +75,12 @@ class SchedulerRewriter(NodeTransformer):
             return self.get_waits() + [node]
         return NodeTransformer.generic_visit(self, node)
 
+    def makeCall(self, func, args = [], keywords = []):
+        return ast.Call(func = func, args = args, keywords = keywords)
+
+    def makeLambda(self, args, call):
+        return ast.Lambda(ast.arguments(posonlyargs = [], args = args, defaults = [], kwonlyargs = [], kw_defaults = []), call)
+
     def visit_Expr(self, node):
         if type(node.value) is ast.Call:
             call = node.value
@@ -103,7 +100,7 @@ class SchedulerRewriter(NodeTransformer):
                     args = [ast.arg("__value__", None)]
                 else:
                     args = [ast.Name("__value__", ast.Param())]
-                call_lambda = ast.Lambda(ast.arguments(posonlyargs = [], args = args, defaults = [], kwonlyargs = [], kw_defaults = []), call)
+                call_lambda = self.makeLambda(args, call)
                 copy_location_kwargs = {
                     "func": ast.Attribute(conc_call.func, 'call', ast.Load()),
                     "args": [call_lambda] + conc_call.args,
@@ -113,6 +110,28 @@ class SchedulerRewriter(NodeTransformer):
                     copy_location_kwargs["kwargs"] = conc_call.kwargs
                 return copy_location(ast.Expr(ast.Call(**copy_location_kwargs)), node)
         return self.generic_visit(node)
+
+    # List comprehensions are self contained, so no need to add to self.arguments
+    def visit_ListComp(self, node):
+        if self.is_concurrent_call(node.elt):
+            self.encounter_call(node.elt)
+            wrapper = self.makeCall(func = ast.Name('list', ast.Load()),
+                args = [self.makeCall(func = ast.Name('map', ast.Load()),
+                    args = [
+                        self.makeLambda([ast.arg(arg='r')], self.makeCall(func = ast.Attribute(ast.Name('r', ast.Load()), 'result', ast.Load()))),
+                        node
+                    ])])
+            return wrapper
+        return self.generic_visit(node)
+
+    def is_valid_assignment(self, node):
+        if not (type(node) is ast.Assign and self.is_concurrent_call(node.value)):
+            return False
+        if len(node.targets) != 1:
+            raise self.not_implemented_error(node, "Concurrent assignment does not support multiple assignment targets")
+        if not type(node.targets[0]) is ast.Subscript:
+            raise self.not_implemented_error(node, "Concurrent assignment only implemented for index based objects")
+        return True
 
     def visit_Assign(self, node):
         if self.is_valid_assignment(node):

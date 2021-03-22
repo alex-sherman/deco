@@ -50,6 +50,11 @@ def subscript_args():
     output = conc_func.in_progress
     return output
 
+@synchronized
+def list_comp():
+    result = [conc_func(i = i) for i in range(10)]
+    return result
+
 class TestAST(unittest.TestCase):
 
     #This just shouldn't throw any exceptions
@@ -72,6 +77,9 @@ class TestAST(unittest.TestCase):
 
     def test_wait_after_append(self):
         self.assertEqual(len_of_append(), 1)
+
+    def test_list_comp(self):
+        self.assertEqual(list_comp(),[{'i': i} for i in range(10)])
 
 if __name__ == "__main__":
     unittest.main()
