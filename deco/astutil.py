@@ -139,7 +139,10 @@ class SchedulerRewriter(NodeTransformer):
             self.encounter_call(call)
             name = node.targets[0].value
             self.arguments.add(SchedulerRewriter.top_level_name(name))
-            index = node.targets[0].slice.value
+            if hasattr(node.targets[0].slice, "value"):
+                index = node.targets[0].slice.value
+            else:
+                index = node.targets[0].slice
             call.func = ast.Attribute(call.func, 'assign', ast.Load())
             call.args = [ast.Tuple([name, index], ast.Load())] + call.args
             return copy_location(ast.Expr(call), node)
