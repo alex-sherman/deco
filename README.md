@@ -54,6 +54,7 @@ Limitations
 -------------
   - The `@concurrent` decorator will only speed up functions that take longer than ~1ms
     - If they take less time your code will run slower!
+  - By default, `@concurrent` function arguments/return values must be pickleable for use with `multiprocessing`
   - The `@synchronized` decorator only works on 'simple' functions, make sure the function meets the following criteria
     - Only calls, or assigns the result of `@concurrent` functions to indexable objects such as:
       - concurrent(...)
